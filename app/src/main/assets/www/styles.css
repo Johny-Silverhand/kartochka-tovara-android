@@ -166,3 +166,17 @@ body { min-height: 100dvh; }
 }
 .photo-wrap { max-height: min(70vw, 420px); width: 100%; }
 .main { padding: clamp(12px, 3vw, 28px); }
+
+.editor-top {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-weight: 600;
+}
+.btn.ghost:hover { color: var(--cyan); }

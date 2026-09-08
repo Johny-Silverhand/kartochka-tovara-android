@@ -1,4 +1,3 @@
-/* Android: KartochkaNative bridge → SQLite */
 let cards = [];
 let currentId = null;
 let photoIndex = 0;
@@ -64,7 +63,7 @@ function renderGallery(photos) {
   const counter = el("photoCounter");
   const prev = el("btnPrev");
   const next = el("btnNext");
-  const addLabel = el("photoAddLabel");
+  const addBtn = el("btnAddPhoto");
   const removeBtn = el("btnRemovePhoto");
 
   if (!photos.length) {
@@ -75,7 +74,7 @@ function renderGallery(photos) {
     prev.classList.remove("visible");
     next.classList.remove("visible");
     removeBtn.classList.add("hidden");
-    addLabel.classList.remove("hidden");
+    addBtn.classList.remove("hidden");
     return;
   }
   if (photoIndex >= photos.length) photoIndex = photos.length - 1;
@@ -87,7 +86,7 @@ function renderGallery(photos) {
   prev.classList.toggle("visible", multi);
   next.classList.toggle("visible", multi);
   removeBtn.classList.remove("hidden");
-  addLabel.classList.toggle("hidden", photos.length >= MAX_PHOTOS);
+  addBtn.classList.toggle("hidden", photos.length >= MAX_PHOTOS);
 }
 
 function fillEditor(c) {
@@ -96,7 +95,7 @@ function fillEditor(c) {
   renderGallery(cardPhotos(c));
 }
 
-async function refresh() {
+function refresh() {
   cards = parse(native().listCards());
   renderList();
   if (currentId) {
@@ -124,6 +123,23 @@ function selectCard(id) {
   setStatus("");
 }
 
+
+function closeCard() {
+  currentId = null;
+  photoIndex = 0;
+  showEditor(false);
+  renderList();
+  setStatus("");
+}
+
+window.__fotoCloseCard = () => {
+  if (!currentId) return false;
+  closeCard();
+  return true;
+};
+
+el("btnClose").onclick = () => closeCard();
+
 el("btnPrev").onclick = () => {
   const photos = cardPhotos(currentCard());
   if (photos.length < 2) return;
@@ -137,7 +153,6 @@ el("btnNext").onclick = () => {
   renderGallery(photos);
 };
 
-/* swipe */
 (() => {
   const wrap = el("photoWrap");
   let x0 = null;
@@ -153,7 +168,7 @@ el("btnNext").onclick = () => {
 })();
 
 el("btnNew").onclick = () => {
-  const c = parse(native().createCard("Новая карточка", ""));
+  const c = parse(native().createCard("Новая карта", ""));
   currentId = c.id;
   photoIndex = 0;
   refresh();
@@ -165,7 +180,7 @@ el("btnSave").onclick = () => {
   try {
     parse(native().updateCard(currentId, el("fieldName").value, el("fieldDesc").value));
     refresh();
-    setStatus("Сохранено в БД");
+    closeCard();
   } catch (e) {
     setStatus(String(e.message || e), false);
   }
@@ -173,7 +188,7 @@ el("btnSave").onclick = () => {
 
 el("btnDelete").onclick = () => {
   if (!currentId) return;
-  if (!confirm("Удалить эту карточку?")) return;
+  if (!confirm("Удалить эту карту?")) return;
   parse(native().deleteCard(currentId));
   currentId = null;
   showEditor(false);
@@ -196,51 +211,42 @@ el("btnRemovePhoto").onclick = () => {
   }
 };
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => {
-      const s = String(r.result || "");
-      const i = s.indexOf(",");
-      resolve(i >= 0 ? s.slice(i + 1) : s);
-    };
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
-
-el("photoInput").onchange = async (ev) => {
-  const file = ev.target.files?.[0];
-  if (!file || !currentId) return;
+el("btnAddPhoto").onclick = () => {
+  if (!currentId) return;
   if (cardPhotos(currentCard()).length >= MAX_PHOTOS) {
     setStatus("Уже 4 фото", false);
-    ev.target.value = "";
     return;
   }
+  if (!native() || typeof native().pickPhoto !== "function") {
+    setStatus("Нет native pickPhoto", false);
+    return;
+  }
+  native().pickPhoto(currentId);
+  setStatus("Выбери источник…");
+};
+
+window.onNativePhotoAdded = (card) => {
   try {
-    const b64 = await fileToBase64(file);
-    const c = parse(native().addPhoto(currentId, file.type || "image/jpeg", b64));
-    const idx = cards.findIndex((x) => x.id === currentId);
-    if (idx >= 0) cards[idx] = c;
-    photoIndex = cardPhotos(c).length - 1;
-    fillEditor(c);
+    if (typeof card === "string") card = JSON.parse(card);
+    if (!card || !card.id) return;
+    currentId = card.id;
+    const idx = cards.findIndex((x) => x.id === card.id);
+    if (idx >= 0) cards[idx] = card;
+    else cards.push(card);
+    photoIndex = Math.max(0, cardPhotos(card).length - 1);
+    fillEditor(card);
     renderList();
-    setStatus("Фото " + cardPhotos(c).length + "/4");
+    setStatus("Фото " + cardPhotos(card).length + "/4");
   } catch (e) {
     setStatus(String(e.message || e), false);
   }
-  ev.target.value = "";
 };
 
 function boot() {
   if (!native()) {
-    setStatus("Нет native bridge — открой в Android-приложении", false);
+    setStatus("Открой в приложении Фото карта", false);
     return;
   }
-  try {
-    refresh();
-  } catch (e) {
-    setStatus(String(e.message || e), false);
-  }
+  try { refresh(); } catch (e) { setStatus(String(e.message || e), false); }
 }
 boot();

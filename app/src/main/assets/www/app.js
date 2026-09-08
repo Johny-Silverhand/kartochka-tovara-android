@@ -4,6 +4,16 @@ let photoIndex = 0;
 const MAX_PHOTOS = 4;
 const PHOTO_BASE = "https://appassets.androidplatform.net/photo/";
 
+function photoSrc(name) {
+  try {
+    if (native() && typeof native().getPhotoDataUrl === "function") {
+      const u = native().getPhotoDataUrl(name);
+      if (u) return u;
+    }
+  } catch (e) {}
+  return PHOTO_BASE + encodeURIComponent(name) + "?t=" + Date.now();
+}
+
 const el = (id) => document.getElementById(id);
 const native = () => window.KartochkaNative;
 
@@ -50,11 +60,21 @@ function renderList() {
     li.appendChild(btn);
     ul.appendChild(li);
   });
+  updateShell();
+}
+
+function updateShell() {
+  const editing = !!currentId;
+  el("editor").classList.toggle("hidden", !editing);
+  // Empty hint only when there are no cards and nothing open
+  el("emptyState").classList.toggle("hidden", editing || cards.length > 0);
+  document.body.classList.toggle("editing", editing);
+  document.body.classList.toggle("has-cards", cards.length > 0);
 }
 
 function showEditor(show) {
-  el("emptyState").classList.toggle("hidden", show);
-  el("editor").classList.toggle("hidden", !show);
+  if (!show) currentId = null;
+  updateShell();
 }
 
 function renderGallery(photos) {
@@ -78,7 +98,7 @@ function renderGallery(photos) {
     return;
   }
   if (photoIndex >= photos.length) photoIndex = photos.length - 1;
-  img.src = PHOTO_BASE + encodeURIComponent(photos[photoIndex]) + "?t=" + Date.now();
+  img.src = photoSrc(photos[photoIndex]);
   img.classList.remove("hidden");
   ph.classList.add("hidden");
   counter.textContent = photoIndex + 1 + " / " + photos.length + " · макс. 4";
@@ -101,12 +121,14 @@ function refresh() {
   if (currentId) {
     const c = cards.find((x) => x.id === currentId);
     if (c) {
-      showEditor(true);
       fillEditor(c);
+      updateShell();
     } else {
       currentId = null;
-      showEditor(false);
+      updateShell();
     }
+  } else {
+    updateShell();
   }
 }
 
@@ -117,9 +139,9 @@ function selectCard(id) {
   const idx = cards.findIndex((x) => x.id === id);
   if (idx >= 0) cards[idx] = c;
   else cards.push(c);
-  showEditor(true);
   fillEditor(c);
   renderList();
+  updateShell();
   setStatus("");
 }
 
@@ -127,8 +149,8 @@ function selectCard(id) {
 function closeCard() {
   currentId = null;
   photoIndex = 0;
-  showEditor(false);
   renderList();
+  updateShell();
   setStatus("");
 }
 
@@ -191,7 +213,6 @@ el("btnDelete").onclick = () => {
   if (!confirm("Удалить эту карту?")) return;
   parse(native().deleteCard(currentId));
   currentId = null;
-  showEditor(false);
   refresh();
   setStatus("Удалено");
 };

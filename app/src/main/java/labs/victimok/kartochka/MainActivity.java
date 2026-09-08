@@ -100,11 +100,10 @@ public class MainActivity extends AppCompatActivity {
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
         s.setOffscreenPreRaster(true);
-        s.setUserAgentString(s.getUserAgentString() + " FotoKartaAndroid/1.0.1");
+        s.setUserAgentString(s.getUserAgentString() + " FotoKartaAndroid/1.0.2");
 
-        // Fully offline — never hit the real network
-        s.setBlockNetworkLoads(true);
-        s.setBlockNetworkImage(true);
+        // Offline via no INTERNET permission + URL intercept (do NOT setBlockNetworkImage —
+        // that also blocks local appassets photo URLs before shouldInterceptRequest).
 
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setBackgroundColor(0xFF070B12);
@@ -122,6 +121,11 @@ public class MainActivity extends AppCompatActivity {
                 if (url != null && "appassets.androidplatform.net".equals(url.getHost())
                     && url.getPath() != null && url.getPath().startsWith("/photo/")) {
                     String name = url.getLastPathSegment();
+                    if (name != null) {
+                        try {
+                            name = java.net.URLDecoder.decode(name, "UTF-8");
+                        } catch (Exception ignored) {}
+                    }
                     File f = db.photoFile(name);
                     if (f != null && f.exists()) {
                         try {
@@ -358,6 +362,27 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void pickPhoto(String cardId) {
             showPhotoSourceDialog(cardId);
+        }
+
+        /** data: URL for WebView img — works even if appassets intercept fails. */
+        @JavascriptInterface
+        public String getPhotoDataUrl(String name) {
+            try {
+                File f = db.photoFile(name);
+                if (f == null || !f.exists()) return "";
+                String mime = "image/jpeg";
+                String n = name == null ? "" : name.toLowerCase();
+                if (n.endsWith(".png")) mime = "image/png";
+                else if (n.endsWith(".webp")) mime = "image/webp";
+                else if (n.endsWith(".gif")) mime = "image/gif";
+                byte[] data;
+                try (InputStream in = new FileInputStream(f)) {
+                    data = readAll(in);
+                }
+                return "data:" + mime + ";base64," + Base64.encodeToString(data, Base64.NO_WRAP);
+            } catch (Exception e) {
+                return "";
+            }
         }
     }
 }
